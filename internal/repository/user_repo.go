@@ -36,3 +36,8 @@ func (r *UserRepository) FindByID(id uint) (*model.User, error) {
 	}
 	return &user, nil
 }
+
+// Update 更新用户信息
+func (r *UserRepository) Update(user *model.User) error {
+	return DB.Save(user).Error // Save方法在user的主键字段存在时就会更新记录，否则会新增一条记录
+}

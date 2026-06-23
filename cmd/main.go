@@ -38,13 +38,19 @@ func main() {
 		api.POST("/user/register", userHandler.Register)
 		api.POST("/user/login", userHandler.Login)
 		api.GET("/feed", videoHandler.GetFeed)
+		api.GET("/video/play/:id", videoHandler.Play)  // 视频播放接口
 
 		// 需要登录的接口（使用JWT中间件）
 		auth := api.Group("")
 		auth.Use(middleware.JWTAuth())
 		{
 			// 只有JWT放行，才能到这里
+			// 用户相关
 			auth.GET("/user/profile", userHandler.GetProfile)
+			auth.PUT("/user/profile", userHandler.UpdateProfile) // 更新个人信息
+			auth.POST("/user/avatar", userHandler.UpdateAvatar)  // 更新头像
+
+			// 视频相关
 			auth.POST("/video/upload", videoHandler.Upload)
 		}
 	}

@@ -148,3 +148,11 @@ func (s *VideoService) GetFeed(page, pageSize int) ([]VideoInfo, int64, error) {
 
 	return videoInfos, total, nil
 }
+
+func (s *VideoService) GetVideoByID(id uint) (*model.Video, error) {
+	video, err := s.videoRepo.FindByID(id)
+	if err != nil {
+		return nil, errors.New("视频不存在")
+	}
+	return video, nil
+}

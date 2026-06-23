@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"path/filepath"
 	"strconv"
 
 	"video_feed/internal/service"
@@ -96,4 +97,43 @@ func (h *VideoHandler) GetFeed(c *gin.Context) {
 		"page":      page,
 		"page_size": pageSize,
 	})
+}
+
+// Play 视频播放接口（新增）
+// GET /api/video/play/:id
+func (h *VideoHandler) Play(c *gin.Context) {
+	// 1. 获取视频ID
+	videoIDStr := c.Param("id")
+	videoID, err := strconv.ParseUint(videoIDStr, 10, 64) // 将字符串 videoIDStr 解析为一个无符号的 64 位整数
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "无效的视频ID",
+		})
+		return
+	}
+
+	// 2. 从数据库获取视频信息
+	video, err := h.videoService.GetVideoByID(uint(videoID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code": 404,
+			"msg":  "视频不存在",
+		})
+		return
+	}
+
+	// 3. 获取视频文件的绝对路径
+	videoPath := video.FilePath
+	if !filepath.IsAbs(videoPath) { // 检查是否是绝对路径
+		// 如果是相对路径，拼接当前工作目录
+		absPath, _ := filepath.Abs(videoPath) // 将路径变成绝对路径
+		videoPath = absPath
+	}
+
+	// 4. 设置响应头并返回视频文件
+	c.Header("Content-Type", "video/mp4") // 告诉浏览器响应体的内容类型是 MP4 视频
+	// filename="xxx.mp4" 表示建议的文件名，如果用户选择下载，浏览器会预填这个文件名
+	c.Header("Content-Disposition", "inline; filename=\""+video.Title+".mp4\"") // 控制浏览器如何展示内容——是在页面内显示（inline），还是作为附件下载（attachment）
+	c.File(videoPath)                                                           // 从本地文件系统读取视频文件，并将其内容作为响应体发送给客户端
 }

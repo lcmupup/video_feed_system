@@ -7,6 +7,7 @@ import (
 	"video_feed/internal/model"
 
 	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
 )
 
 var DB *gorm.DB
@@ -27,6 +28,11 @@ func InitDB(cfg *config.DatabaseConfig) {
 		log.Fatalf("数据库连接失败: %v", err) // 连接失败直接退出
 	}
 	// 自动迁移（建表）
-	DB.AutoMigrate(&model.User{}, &model.Video{})
+	DB.AutoMigrate(
+		&model.User{},
+		&model.Video{},
+		&model.Like{},
+		&model.Favorite{},
+	)
 	log.Println("数据库连接成功，表已自动创建")
 }

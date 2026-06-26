@@ -32,14 +32,16 @@ func main() {
 	userHandler := handler.NewUserHandler()
 	videoHandler := handler.NewVideoHandler()
 	interactionHandler := handler.NewInteractionHandler()
+	commentHandler := handler.NewCommentHandler()
 
 	api := r.Group("/api")
 	{
 		// 公开接口（无需登录）
-		api.POST("/user/register", userHandler.Register) // 用户注册
-		api.POST("/user/login", userHandler.Login)       // 用户登录
-		api.GET("/feed", videoHandler.GetFeed)           // 获取feed流
-		api.GET("/video/play/:id", videoHandler.Play)    // 视频播放接口
+		api.POST("/user/register", userHandler.Register)           // 用户注册
+		api.POST("/user/login", userHandler.Login)                 // 用户登录
+		api.GET("/feed", videoHandler.GetFeed)                     // 获取feed流
+		api.GET("/video/play/:id", videoHandler.Play)              // 视频播放接口
+		api.GET("/video/:id/comments", commentHandler.GetComments) // 查看评论
 
 		// 需要登录的接口（使用JWT中间件）
 		auth := api.Group("")
@@ -64,6 +66,10 @@ func main() {
 			auth.DELETE("/video/:id/favorite", interactionHandler.UnfavoriteVideo) // 取消收藏
 			auth.GET("/video/:id/favorite", interactionHandler.GetFavoriteStatus)  // 获取收藏状态
 			auth.GET("/user/favorites", interactionHandler.GetUserFavorites)       // 获取收藏列表
+
+			// 评论相关
+			auth.POST("/video/:id/comment", commentHandler.CreateComment) // 发表评论
+			auth.DELETE("/comment/:id", commentHandler.DeleteComment)     // 删除评论
 		}
 	}
 
@@ -77,5 +83,8 @@ func main() {
 	// 7. 启动服务
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	log.Printf("视频Feed流服务启动成功，监听端口: %d", cfg.Server.Port)
-	r.Run(addr)
+	err = r.Run(addr)
+	if err != nil {
+		log.Fatalln("启动服务器失败：", err)
+	}
 }

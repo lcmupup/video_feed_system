@@ -52,3 +52,26 @@ func (r *VideoRepository) GetFeed(page, pageSize int) ([]model.Video, int64, err
 
 	return videos, total, err
 }
+
+// SearchVideos 搜索视频（按视频标题或描述模糊匹配）
+func (r *VideoRepository) SearchVideos(keyword string, page, pageSize int) ([]model.Video, int64, error) {
+	var videos []model.Video
+	var total int64 // 搜索结果条数
+
+	// 构建查询条件
+	query := DB.Model(&model.Video{}).
+		Where("status = ?", 1). // 只搜索已发布的视频
+		Where("title LIKE ? OR description LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+
+	// 统计总数
+	query.Count(&total)
+
+	// 分页查询
+	err := query.
+		Order("created_at DESC").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&videos).Error
+
+	return videos, total, err
+}

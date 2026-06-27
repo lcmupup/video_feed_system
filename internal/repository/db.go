@@ -34,6 +34,7 @@ func InitDB(cfg *config.DatabaseConfig) {
 		&model.Like{},
 		&model.Favorite{},
 		&model.Comment{},
+		&model.Follow{},
 	)
 	log.Println("数据库连接成功，表已自动创建")
 }

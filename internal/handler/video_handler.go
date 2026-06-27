@@ -137,3 +137,48 @@ func (h *VideoHandler) Play(c *gin.Context) {
 	c.Header("Content-Disposition", "inline; filename=\""+video.Title+".mp4\"") // 控制浏览器如何展示内容——是在页面内显示（inline），还是作为附件下载（attachment）
 	c.File(videoPath)                                                           // 从本地文件系统读取视频文件，并将其内容作为响应体发送给客户端
 }
+
+// Search 搜索视频接口
+// GET /api/video/search?keyword=xxx&page=1&page_size=10
+func (h *VideoHandler) Search(c *gin.Context) {
+	keyword := c.Query("keyword")
+	if keyword == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "搜索关键词不能为空",
+		})
+		return
+	}
+
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "10")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 50 {
+		pageSize = 10
+	}
+
+	videos, total, err := h.videoService.SearchVideos(keyword, page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":      200,
+		"msg":       "搜索成功",
+		"data":      videos,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+		"keyword":   keyword,
+	})
+}

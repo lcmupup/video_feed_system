@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"video_feed/internal/model"
@@ -35,15 +36,18 @@ type UploadVideoReq struct {
 
 // VideoInfo 视频信息响应
 type VideoInfo struct {
-	ID          uint   `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	FilePath    string `json:"file_path"`
-	CoverPath   string `json:"cover_path"`
-	Duration    int64  `json:"duration"`
-	FileSize    int64  `json:"file_size"`
-	CreatedAt   string `json:"created_at"`
-	Status      int    `json:"status"`
+	ID             uint   `json:"id"`
+	Title          string `json:"title"`
+	Description    string `json:"description"`
+	FilePath       string `json:"file_path,omitempty"` // 搜索时不返回文件路径，omitempty表示当字段值为零值时，序列化时忽略该字段
+	FileSize       int64  `json:"file_size"`
+	CreatedAt      string `json:"created_at"`
+	URL            string `json:"url"`                       // 视频播放地址
+	Status         int    `json:"status"`                    // 视频状态，0-待审核，1-已发布，2-已下架
+	HighlightTitle string `json:"highlight_title,omitempty"` // 搜索高亮（仅搜索时返回）
+	HighlightDesc  string `json:"highlight_desc,omitempty"`  // 搜索高亮（仅搜索时返回）
+	IsLiked        bool   `json:"is_liked"`                  // 是否点赞
+	IsFavored      bool   `json:"is_favored"`                // 是否收藏
 }
 
 // UploadVideo 上传视频
@@ -133,6 +137,7 @@ func (s *VideoService) GetFeed(page, pageSize int) ([]VideoInfo, int64, error) {
 		return nil, 0, errors.New("获取Feed流失败")
 	}
 
+	// 转换成响应格式
 	var videoInfos []VideoInfo
 	for _, v := range videos {
 		videoInfos = append(videoInfos, VideoInfo{
@@ -149,10 +154,50 @@ func (s *VideoService) GetFeed(page, pageSize int) ([]VideoInfo, int64, error) {
 	return videoInfos, total, nil
 }
 
+// GetVideoByID 通过视频ID获取视频
 func (s *VideoService) GetVideoByID(id uint) (*model.Video, error) {
 	video, err := s.videoRepo.FindByID(id)
 	if err != nil {
 		return nil, errors.New("视频不存在")
 	}
 	return video, nil
+}
+
+// SearchVideos 搜索视频
+func (s *VideoService) SearchVideos(keyword string, page, pageSize int) ([]VideoInfo, int64, error) {
+	// 1. 校验关键词长度
+	if len(keyword) < 1 || len(keyword) > 100 {
+		return nil, 0, errors.New("关键词长度应在1-100个字符之间")
+	}
+
+	// 2. 调用仓库层搜索
+	videos, total, err := s.videoRepo.SearchVideos(keyword, page, pageSize)
+	if err != nil {
+		return nil, 0, errors.New("搜索视频失败")
+	}
+
+	// 3. 转换为响应格式
+	var videoInfos []VideoInfo
+	for _, v := range videos {
+		videoInfo := VideoInfo{
+			ID:          v.ID,
+			Title:       v.Title,
+			Description: v.Description,
+			FilePath:    v.FilePath,
+			FileSize:    v.FileSize,
+			CreatedAt:   v.CreatedAt.Format("2006-01-02 15:04:05"),
+			Status:      v.Status,
+			// 高亮关键词
+			HighlightTitle: highlightKeyword(v.Title, keyword),
+			HighlightDesc:  highlightKeyword(v.Description, keyword),
+		}
+		videoInfos = append(videoInfos, videoInfo)
+	}
+
+	return videoInfos, total, nil
+}
+
+// highlightKeyword 高亮关键词（用HTML标记包裹）
+func highlightKeyword(text, keyword string) string {
+	return strings.ReplaceAll(text, keyword, "<em>"+keyword+"</em>") // 将text中所有匹配keyword的子串替换为新的内容
 }

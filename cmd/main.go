@@ -33,15 +33,19 @@ func main() {
 	videoHandler := handler.NewVideoHandler()
 	interactionHandler := handler.NewInteractionHandler()
 	commentHandler := handler.NewCommentHandler()
+	followHandler := handler.NewFollowHandler()
 
 	api := r.Group("/api")
 	{
 		// 公开接口（无需登录）
-		api.POST("/user/register", userHandler.Register)           // 用户注册
-		api.POST("/user/login", userHandler.Login)                 // 用户登录
-		api.GET("/feed", videoHandler.GetFeed)                     // 获取feed流
-		api.GET("/video/play/:id", videoHandler.Play)              // 视频播放接口
-		api.GET("/video/:id/comments", commentHandler.GetComments) // 查看评论
+		api.POST("/user/register", userHandler.Register)             // 用户注册
+		api.POST("/user/login", userHandler.Login)                   // 用户登录
+		api.GET("/feed", videoHandler.GetFeed)                       // 获取feed流
+		api.GET("/video/play/:id", videoHandler.Play)                // 视频播放接口
+		api.GET("/video/:id/comments", commentHandler.GetComments)   // 查看评论
+		api.GET("/video/search", videoHandler.Search)                // 视频搜索
+		api.GET("/user/:id/followers", followHandler.GetFollowers)   // 获取粉丝列表
+		api.GET("/user/:id/followings", followHandler.GetFollowings) // 获取关注列表
 
 		// 需要登录的接口（使用JWT中间件）
 		auth := api.Group("")
@@ -70,6 +74,10 @@ func main() {
 			// 评论相关
 			auth.POST("/video/:id/comment", commentHandler.CreateComment) // 发表评论
 			auth.DELETE("/comment/:id", commentHandler.DeleteComment)     // 删除评论
+
+			// 关注相关
+			auth.POST("/user/:id/follow", followHandler.FollowUser)     // 关注用户
+			auth.DELETE("/user/:id/follow", followHandler.UnfollowUser) // 取消关注
 		}
 	}
 

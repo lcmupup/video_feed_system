@@ -107,7 +107,7 @@ func (s *ChatService) GetHistory(user1, user2 uint, page, pageSize int) ([]Messa
 			FromUserID: m.FromUserID,
 			ToUserID:   m.ToUserID,
 			Content:    m.Content,
-			IsRead:     m.IsRead,
+			IsRead:     m.IsRead == 1,
 			CreatedAt:  m.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
 		if m.FromUser.ID != 0 {
@@ -143,7 +143,7 @@ func SaveMessage(body *ChatMessageBody) (*model.Message, error) {
 		FromUserID: body.FromUserID,
 		ToUserID:   body.ToUserID,
 		Content:    body.Content,
-		IsRead:     false,
+		IsRead:     0,
 	}
 
 	repo := repository.NewMessageRepository()

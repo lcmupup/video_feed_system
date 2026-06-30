@@ -4,18 +4,17 @@ import (
 	"time"
 )
 
-// Message 聊天消息模型
+// Message 聊天消息模型（无软删除，用硬删除）
 type Message struct {
-	ID         uint       `gorm:"primarykey" json:"id"`
-	CreatedAt  time.Time  `json:"created_at"`
-	DeletedAt  *time.Time `gorm:"index" json:"-"`
+	ID        uint      `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
 
-	FromUserID uint   `gorm:"index:idx_conversation;not null" json:"from_user_id"` // 发送者ID
-	ToUserID   uint   `gorm:"index:idx_conversation;index:idx_to_user;not null" json:"to_user_id"` // 接收者ID
-	Content    string `gorm:"type:text;not null" json:"content"`                   // 消息内容
-	IsRead     bool   `gorm:"default:false" json:"is_read"`                        // 是否已读
+	FromUserID uint   `gorm:"index;not null" json:"from_user_id"`
+	ToUserID   uint   `gorm:"index;not null" json:"to_user_id"`
+	Content    string `gorm:"type:text;not null" json:"content"`
+	IsRead     int    `gorm:"default:0" json:"is_read"` // 0=未读, 1=已读（用 int 避免 GORM v1 对 bool 的 AutoMigrate bug）
 
-	// 关联（不存数据库，仅用于 Preload 查询）
-	FromUser User `gorm:"foreignKey:FromUserID" json:"from_user,omitempty"`
-	ToUser   User `gorm:"foreignKey:ToUserID" json:"to_user,omitempty"`
+	// 关联（GORM v1 通过命名约定自动关联，不显式声明 foreignKey 避免 AutoMigrate 死循环）
+	FromUser User `json:"from_user,omitempty"`
+	ToUser   User `json:"to_user,omitempty"`
 }

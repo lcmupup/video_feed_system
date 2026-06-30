@@ -27,6 +27,7 @@ func InitDB(cfg *config.DatabaseConfig) {
 	if err != nil {
 		log.Fatalf("数据库连接失败: %v", err) // 连接失败直接退出
 	}
+
 	// 自动迁移（建表）
 	DB.AutoMigrate(
 		&model.User{},

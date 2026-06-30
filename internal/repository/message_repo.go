@@ -107,6 +107,6 @@ func (r *MessageRepository) GetConversations(userID uint) ([]ConversationInfo, e
 // MarkAsRead 标记消息为已读
 func (r *MessageRepository) MarkAsRead(fromUserID, toUserID uint) error {
 	return DB.Model(&model.Message{}).
-		Where("from_user_id = ? AND to_user_id = ? AND is_read = ?", fromUserID, toUserID, false).
+		Where("from_user_id = ? AND to_user_id = ? AND is_read = ?", fromUserID, toUserID, 0).
 		Update("is_read", true).Error
 }

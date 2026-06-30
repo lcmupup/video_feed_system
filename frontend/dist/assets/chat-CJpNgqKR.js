@@ -1,0 +1,1 @@
+import{r as e}from"./_plugin-vue_export-helper-COb3X83g.js";function a(t,s){return e.post("/chat/send",{to_user_id:t,content:s})}function o(t,s=1,r=20){return e.get(`/chat/history/${t}`,{params:{page:s,page_size:r}})}function i(){return e.get("/chat/conversations")}export{o as a,i as g,a as s};

@@ -10,6 +10,6 @@ type Follow struct {
 	CreatedAt time.Time  `json:"created_at"`
 	DeletedAt *time.Time `gorm:"index" json:"-"`
 
-	FollowerID  uint `gorm:"index:idx_follower_following,unique;not null" json:"follower_id"`  // 关注者ID
-	FollowingID uint `gorm:"index:idx_follower_following,unique;not null" json:"following_id"` // 被关注者ID
+	FollowerID  uint `gorm:"unique_index:idx_follower_following;not null" json:"follower_id"`  // 关注者ID
+	FollowingID uint `gorm:"unique_index:idx_follower_following;not null" json:"following_id"` // 被关注者ID
 }

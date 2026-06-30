@@ -128,6 +128,80 @@ func PublishChatMessage(body []byte) error {
 	)
 }
 
+// ========== 视频上传队列 ==========
+
+const (
+	videoUploadExchange   = "video.exchange"
+	videoUploadQueue      = "video.upload.queue"
+	videoUploadRoutingKey = "video.upload"
+)
+
+// DeclareVideoUploadQueue 声明视频上传相关的 Exchange 和 Queue
+func DeclareVideoUploadQueue() error {
+	if MQChannel == nil {
+		return fmt.Errorf("RabbitMQ Channel 未初始化")
+	}
+
+	if err := MQChannel.ExchangeDeclare(
+		videoUploadExchange, "direct",
+		true, false, false, false, nil,
+	); err != nil {
+		return fmt.Errorf("声明视频 Exchange 失败: %w", err)
+	}
+
+	if _, err := MQChannel.QueueDeclare(
+		videoUploadQueue,
+		true,  // durable
+		false, // auto-delete
+		false, // exclusive
+		false, // no-wait
+		nil,
+	); err != nil {
+		return fmt.Errorf("声明视频 Queue 失败: %w", err)
+	}
+
+	if err := MQChannel.QueueBind(
+		videoUploadQueue, videoUploadRoutingKey, videoUploadExchange, false, nil,
+	); err != nil {
+		return fmt.Errorf("绑定视频 Queue 失败: %w", err)
+	}
+
+	log.Println("视频上传队列声明成功")
+	return nil
+}
+
+// PublishVideoUpload 发布视频上传消息到 RabbitMQ
+func PublishVideoUpload(body []byte) error {
+	if MQChannel == nil {
+		return fmt.Errorf("RabbitMQ Channel 未初始化")
+	}
+
+	return MQChannel.Publish(
+		videoUploadExchange,
+		videoUploadRoutingKey,
+		false, false,
+		amqp.Publishing{
+			ContentType:  "application/json",
+			DeliveryMode: amqp.Persistent,
+			Body:         body,
+		},
+	)
+}
+
+// ConsumeVideoUploads 消费视频上传消息
+func ConsumeVideoUploads() (<-chan amqp.Delivery, error) {
+	if MQChannel == nil {
+		return nil, fmt.Errorf("RabbitMQ Channel 未初始化")
+	}
+
+	return MQChannel.Consume(
+		videoUploadQueue,
+		"",
+		false, // 手动ACK
+		false, false, false, nil,
+	)
+}
+
 // ConsumeChatMessages 消费聊天消息，返回一个只读 channel
 func ConsumeChatMessages() (<-chan amqp.Delivery, error) {
 	if MQChannel == nil {

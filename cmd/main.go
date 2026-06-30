@@ -34,10 +34,14 @@ func main() {
 	repository.InitRabbitMQ(&cfg.RabbitMQ)
 	defer repository.CloseRabbitMQ()
 
-	// 5.1 声明聊天消息队列（Exchange + Queue 绑定）
+	// 5.1 声明队列（Exchange + Queue 绑定）
 	repository.DeclareChatQueue()
+	repository.DeclareVideoUploadQueue()
 
-	// 5.2 启动聊天消息消费者（在单独的 goroutine 中运行）
+	// 5.2 启动视频上传消费者（异步写入 MySQL）
+	go service.StartVideoConsumer()
+
+	// 5.3 启动聊天消息消费者（异步落库 + WebSocket 推送）
 	go service.StartConsumer(func(body *service.ChatMessageBody) error {
 		// 1. 持久化到 MySQL
 		msg, err := service.SaveMessage(body)

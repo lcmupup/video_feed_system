@@ -1,9 +1,11 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -50,11 +52,22 @@ type VideoInfo struct {
 	IsFavored      bool   `json:"is_favored"`                // 是否收藏
 }
 
+// VideoUploadMessage 视频上传 RabbitMQ 消息体
+type VideoUploadMessage struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	FilePath    string `json:"file_path"`
+	FileSize    int64  `json:"file_size"`
+	UserID      uint   `json:"user_id"`
+	Status      int    `json:"status"`
+}
+
 // UploadVideo 上传视频
+// 文件落盘后发布到 RabbitMQ 即返回，消费者异步写入 MySQL
 func (s *VideoService) UploadVideo(req *UploadVideoReq) (*VideoInfo, error) {
 	// 1. 验证文件类型
-	ext := filepath.Ext(req.File.Filename) // 从文件中提取扩展名（包含前导点）
-	allowedExts := map[string]bool{        // 支持的视频格式
+	ext := filepath.Ext(req.File.Filename)
+	allowedExts := map[string]bool{
 		".mp4": true,
 		".avi": true,
 		".mov": true,
@@ -67,67 +80,138 @@ func (s *VideoService) UploadVideo(req *UploadVideoReq) (*VideoInfo, error) {
 	}
 
 	// 2. 限制文件大小（最大100MB）
-	maxSize := int64(100 * 1024 * 1024) // 100MB
+	maxSize := int64(100 * 1024 * 1024)
 	if req.File.Size > maxSize {
 		return nil, errors.New("视频文件过大，最大支持100MB")
 	}
 
 	// 3. 创建存储目录
 	uploadDir := "./uploads/videos/" + time.Now().Format("2006/01/02")
-	err := os.MkdirAll(uploadDir, 0755) // 递归创建目录，如果父目录不存在，会自动创建所有缺失的父目录，0755表示权限值
-	if err != nil {
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return nil, errors.New("创建存储目录失败")
 	}
 
-	// 4. 生成唯一文件名
-	// time.Now().UnixNano()获取从1970-01-01到现在的纳秒数，因为纳秒精度很高，两次调用几乎不会重复，适合用来生成临时的唯一ID
+	// 4. 生成唯一文件名并保存文件
 	fileName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), req.Title, ext)
 	filePath := filepath.Join(uploadDir, fileName)
 
-	// 5. 保存文件
-	// 打开源文件(用户上传的文件)
 	src, err := req.File.Open()
 	if err != nil {
 		return nil, errors.New("打开上传文件失败")
 	}
 	defer src.Close()
 
-	// 创建目标文件(要保存在服务器的文件)
-	dst, err := os.Create(filePath) // 先在服务器上创建一个空文件
+	dst, err := os.Create(filePath)
 	if err != nil {
 		return nil, errors.New("创建目标文件失败")
 	}
 	defer dst.Close()
 
-	_, err = io.Copy(dst, src) // 再把用户文件的内容写到服务器文件里
-	if err != nil {
+	if _, err = io.Copy(dst, src); err != nil {
 		return nil, errors.New("保存文件失败")
 	}
 
-	// 6. 保存视频信息到数据库
-	video := &model.Video{
+	// 5. 发布到 RabbitMQ（异步写入 MySQL），不阻塞用户
+	msg := VideoUploadMessage{
 		Title:       req.Title,
 		Description: req.Description,
 		FilePath:    filePath,
 		FileSize:    req.File.Size,
 		UserID:      req.UserID,
-		Status:      1, // 默认已发布
+		Status:      1,
 	}
 
-	err = s.videoRepo.Create(video)
+	jsonBody, err := json.Marshal(msg)
 	if err != nil {
-		return nil, errors.New("保存视频信息失败")
+		return nil, errors.New("消息序列化失败")
 	}
 
+	if err := repository.PublishVideoUpload(jsonBody); err != nil {
+		// RabbitMQ 不可用时，降级为同步写 MySQL
+		log.Printf("RabbitMQ 发布失败，降级为同步写入 MySQL: %v", err)
+		video := &model.Video{
+			Title:       req.Title,
+			Description: req.Description,
+			FilePath:    filePath,
+			FileSize:    req.File.Size,
+			UserID:      req.UserID,
+			Status:      1,
+		}
+		if err := s.videoRepo.Create(video); err != nil {
+			return nil, errors.New("保存视频信息失败")
+		}
+		return &VideoInfo{
+			ID:          video.ID,
+			Title:       video.Title,
+			Description: video.Description,
+			FilePath:    video.FilePath,
+			FileSize:    video.FileSize,
+			CreatedAt:   video.CreatedAt.Format("2006-01-02 15:04:05"),
+			Status:      video.Status,
+		}, nil
+	}
+
+	// 异步处理，立即返回（此时尚未写入 MySQL，无 ID）
 	return &VideoInfo{
-		ID:          video.ID,
-		Title:       video.Title,
-		Description: video.Description,
-		FilePath:    video.FilePath,
-		FileSize:    video.FileSize,
-		CreatedAt:   video.CreatedAt.Format("2006-01-02 15:04:05"),
-		Status:      video.Status,
+		Title:       req.Title,
+		Description: req.Description,
+		FilePath:    filePath,
+		FileSize:    req.File.Size,
+		Status:      0, // 0 = 处理中
 	}, nil
+}
+
+// SaveVideoToDB 将视频信息写入 MySQL（Consumer 调用）
+func SaveVideoToDB(msg *VideoUploadMessage) (*model.Video, error) {
+	video := &model.Video{
+		Title:       msg.Title,
+		Description: msg.Description,
+		FilePath:    msg.FilePath,
+		FileSize:    msg.FileSize,
+		UserID:      msg.UserID,
+		Status:      msg.Status,
+	}
+
+	repo := repository.NewVideoRepository()
+	if err := repo.Create(video); err != nil {
+		return nil, err
+	}
+	return video, nil
+}
+
+// StartVideoConsumer 启动视频上传消费者
+func StartVideoConsumer() {
+	if repository.MQChannel == nil {
+		log.Println("RabbitMQ 未连接，跳过视频上传消费者启动")
+		return
+	}
+
+	msgs, err := repository.ConsumeVideoUploads()
+	if err != nil {
+		log.Printf("启动视频上传消费者失败: %v", err)
+		return
+	}
+
+	log.Println("视频上传消费者已启动")
+
+	for d := range msgs {
+		var msg VideoUploadMessage
+		if err := json.Unmarshal(d.Body, &msg); err != nil {
+			log.Printf("视频消息解析失败: %v", err)
+			d.Nack(false, false)
+			continue
+		}
+
+		video, err := SaveVideoToDB(&msg)
+		if err != nil {
+			log.Printf("视频信息写入 MySQL 失败: %v", err)
+			d.Nack(false, true) // 重新入队，稍后重试
+			continue
+		}
+
+		log.Printf("视频信息已写入 MySQL: id=%d, title=%s", video.ID, video.Title)
+		d.Ack(false)
+	}
 }
 
 // GetFeed 获取Feed流

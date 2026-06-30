@@ -7,6 +7,7 @@ import (
 	"video_feed/internal/handler"
 	"video_feed/internal/middleware"
 	"video_feed/internal/repository"
+	"video_feed/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -45,6 +46,10 @@ func main() {
 	interactionHandler := handler.NewInteractionHandler()
 	commentHandler := handler.NewCommentHandler()
 	followHandler := handler.NewFollowHandler()
+	rankingHandler := handler.NewRankingHandler()
+
+	// 冷启动：从 MySQL 同步点赞数到 Redis 排行榜（Redis 不可用时会跳过）
+	service.RefreshRanking()
 
 	api := r.Group("/api")
 	{
@@ -57,6 +62,7 @@ func main() {
 		api.GET("/video/search", videoHandler.Search)                // 视频搜索
 		api.GET("/user/:id/followers", followHandler.GetFollowers)   // 获取粉丝列表
 		api.GET("/user/:id/followings", followHandler.GetFollowings) // 获取关注列表
+		api.GET("/ranking", rankingHandler.GetRanking)                 // 点赞排行榜
 
 		// 需要登录的接口（使用JWT中间件）
 		auth := api.Group("")
@@ -88,6 +94,9 @@ func main() {
 			// 关注相关
 			auth.POST("/user/:id/follow", followHandler.FollowUser)     // 关注用户
 			auth.DELETE("/user/:id/follow", followHandler.UnfollowUser) // 取消关注
+
+			// 管理相关
+			auth.POST("/admin/refresh-ranking", rankingHandler.RefreshRanking) // 手动刷新排行榜
 		}
 	}
 

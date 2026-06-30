@@ -44,7 +44,14 @@ func (s *InteractionService) LikeVideo(userID, videoID uint) error {
 		UserID:  userID,
 		VideoID: videoID,
 	}
-	return s.interRepo.CreateLike(like)
+	if err := s.interRepo.CreateLike(like); err != nil {
+		return err
+	}
+
+	// 4. 更新 Redis 排行榜（异步，失败不影响主流程）
+	go UpdateRankingLikeCount(videoID, 1)
+
+	return nil
 }
 
 // UnlikeVideo 取消点赞
@@ -65,7 +72,14 @@ func (s *InteractionService) UnlikeVideo(userID, videoID uint) error {
 	}
 
 	// 3. 取消点赞
-	return s.interRepo.DeleteLike(userID, videoID)
+	if err := s.interRepo.DeleteLike(userID, videoID); err != nil {
+		return err
+	}
+
+	// 4. 更新 Redis 排行榜（异步，失败不影响主流程）
+	go UpdateRankingLikeCount(videoID, -1)
+
+	return nil
 }
 
 // VideoLikeStatus 视频点赞状态

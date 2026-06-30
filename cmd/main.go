@@ -15,20 +15,31 @@ func main() {
 	// 1. 加载配置
 	cfg, err := config.LoadConfig("config/config.yaml")
 	if err != nil {
-		//打印完内容后会立即终止程序，defer后的语句都不会执行
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	// 2. 初始化数据库
 	repository.InitDB(&cfg.Database)
+	defer repository.CloseMySQL()
 
-	// 3. 设置Gin模式
+	// 3. 初始化 JWT（从配置文件读取 Secret 和过期时间）
+	middleware.InitJWT(cfg.JWT.Secret, cfg.JWT.Expire)
+
+	// 4. 初始化 Redis（连接失败不影响服务启动）
+	repository.InitRedis(&cfg.Redis)
+	defer repository.CloseRedis()
+
+	// 5. 初始化 RabbitMQ（连接失败不影响服务启动）
+	repository.InitRabbitMQ(&cfg.RabbitMQ)
+	defer repository.CloseRabbitMQ()
+
+	// 6. 设置 Gin 模式
 	gin.SetMode(cfg.Server.Mode)
 
-	// 4. 创建Gin引擎
+	// 7. 创建 Gin 引擎
 	r := gin.Default()
 
-	// 5. 注册路由
+	// 8. 注册路由
 	userHandler := handler.NewUserHandler()
 	videoHandler := handler.NewVideoHandler()
 	interactionHandler := handler.NewInteractionHandler()
@@ -51,7 +62,6 @@ func main() {
 		auth := api.Group("")
 		auth.Use(middleware.JWTAuth())
 		{
-			// 只有JWT放行，才能到这里
 			// 用户相关
 			auth.GET("/user/profile", userHandler.GetProfile)    // 获取个人简介
 			auth.PUT("/user/profile", userHandler.UpdateProfile) // 更新个人简介
@@ -81,18 +91,19 @@ func main() {
 		}
 	}
 
-	// 6. 健康检查
+	// 9. 健康检查
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
 		})
 	})
 
-	// 7. 启动服务
+	// 10. 启动服务
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	log.Printf("视频Feed流服务启动成功，监听端口: %d", cfg.Server.Port)
 	err = r.Run(addr)
 	if err != nil {
 		log.Fatalln("启动服务器失败：", err)
 	}
+	log.Println("服务器已安全退出")
 }

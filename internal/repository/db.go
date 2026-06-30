@@ -38,3 +38,12 @@ func InitDB(cfg *config.DatabaseConfig) {
 	)
 	log.Println("数据库连接成功，表已自动创建")
 }
+
+// 关闭数据库连接
+func CloseMySQL() {
+	err := DB.Close()
+	if err != nil {
+		log.Printf("关闭 mysql 连接失败: %v", err)
+	}
+	log.Println("mysql 连接已关闭")
+}

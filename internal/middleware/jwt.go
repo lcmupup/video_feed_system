@@ -10,7 +10,16 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret = []byte("video_feed_secret_key") // 生产环境应改为配置
+var (
+	jwtSecret    []byte
+	jwtExpireHours int
+)
+
+// InitJWT 初始化 JWT 配置（从配置文件读取）
+func InitJWT(secret string, expireHours int) {
+	jwtSecret = []byte(secret)
+	jwtExpireHours = expireHours
+}
 
 // Claims 自定义JWT载荷
 type Claims struct {
@@ -19,13 +28,13 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateToken 生成JWT Token，有效期24小时
+// GenerateToken 生成JWT Token
 func GenerateToken(userID uint, username string) (string, error) {
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(jwtExpireHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "video_feed",
 		},

@@ -1,9 +1,10 @@
 package handler
 
 import (
-	"net/http"
 	"strconv"
+
 	"video_feed/internal/service"
+	"video_feed/pkg/errcode"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,26 +27,17 @@ func (h *FollowHandler) FollowUser(c *gin.Context) {
 	followerID, _ := c.Get("user_id")
 	followingID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  "无效的用户ID",
-		})
+		errcode.Error(c, errcode.CodeBadRequest, "无效的用户ID")
 		return
 	}
 
 	err = h.followService.FollowUser(followerID.(uint), uint(followingID))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  err.Error(),
-		})
+		errcode.Error(c, errcode.CodeBadRequest, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 200,
-		"msg":  "关注成功",
-	})
+	errcode.Success(c, "关注成功")
 }
 
 // UnfollowUser 取消关注
@@ -54,26 +46,17 @@ func (h *FollowHandler) UnfollowUser(c *gin.Context) {
 	followerID, _ := c.Get("user_id")
 	followingID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  "无效的用户ID",
-		})
+		errcode.Error(c, errcode.CodeBadRequest, "无效的用户ID")
 		return
 	}
 
 	err = h.followService.UnfollowUser(followerID.(uint), uint(followingID))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  err.Error(),
-		})
+		errcode.Error(c, errcode.CodeBadRequest, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 200,
-		"msg":  "取消关注成功",
-	})
+	errcode.Success(c, "取消关注成功")
 }
 
 // GetFollowers 获取粉丝列表
@@ -81,10 +64,7 @@ func (h *FollowHandler) UnfollowUser(c *gin.Context) {
 func (h *FollowHandler) GetFollowers(c *gin.Context) {
 	userID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  "无效的用户ID",
-		})
+		errcode.Error(c, errcode.CodeBadRequest, "无效的用户ID")
 		return
 	}
 
@@ -102,21 +82,11 @@ func (h *FollowHandler) GetFollowers(c *gin.Context) {
 
 	users, total, err := h.followService.GetFollowers(uint(userID), page, pageSize)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  err.Error(),
-		})
+		errcode.Error(c, errcode.CodeBadRequest, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":      200,
-		"msg":       "获取成功",
-		"data":      users,
-		"total":     total,
-		"page":      page,
-		"page_size": pageSize,
-	})
+	errcode.SuccessWithPagination(c, "获取成功", users, total, page, pageSize)
 }
 
 // GetFollowings 获取关注列表
@@ -124,10 +94,7 @@ func (h *FollowHandler) GetFollowers(c *gin.Context) {
 func (h *FollowHandler) GetFollowings(c *gin.Context) {
 	userID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  "无效的用户ID",
-		})
+		errcode.Error(c, errcode.CodeBadRequest, "无效的用户ID")
 		return
 	}
 
@@ -145,19 +112,9 @@ func (h *FollowHandler) GetFollowings(c *gin.Context) {
 
 	users, total, err := h.followService.GetFollowings(uint(userID), page, pageSize)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": 400,
-			"msg":  err.Error(),
-		})
+		errcode.Error(c, errcode.CodeBadRequest, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"code":      200,
-		"msg":       "获取成功",
-		"data":      users,
-		"total":     total,
-		"page":      page,
-		"page_size": pageSize,
-	})
+	errcode.SuccessWithPagination(c, "获取成功", users, total, page, pageSize)
 }

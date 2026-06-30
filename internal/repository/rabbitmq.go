@@ -54,3 +54,93 @@ func CloseRabbitMQ() {
 	}
 	log.Println("RabbitMQ 连接已关闭")
 }
+
+// ========== 聊天消息队列 ==========
+
+const (
+	chatExchange   = "chat.exchange"
+	chatQueue      = "chat.queue"
+	chatRoutingKey = "chat.message"
+)
+
+// DeclareChatQueue 声明聊天相关的 Exchange 和 Queue
+func DeclareChatQueue() error {
+	if MQChannel == nil {
+		return fmt.Errorf("RabbitMQ Channel 未初始化")
+	}
+
+	// 声明 Direct Exchange
+	if err := MQChannel.ExchangeDeclare(
+		chatExchange, // name
+		"direct",     // type
+		true,         // durable（持久化）
+		false,        // auto-delete
+		false,        // internal
+		false,        // no-wait
+		nil,          // arguments
+	); err != nil {
+		return fmt.Errorf("声明 Exchange 失败: %w", err)
+	}
+
+	// 声明 Queue
+	if _, err := MQChannel.QueueDeclare(
+		chatQueue, // name
+		true,      // durable（持久化）
+		false,     // auto-delete
+		false,     // exclusive
+		false,     // no-wait
+		nil,       // arguments
+	); err != nil {
+		return fmt.Errorf("声明 Queue 失败: %w", err)
+	}
+
+	// 绑定 Queue 到 Exchange
+	if err := MQChannel.QueueBind(
+		chatQueue,
+		chatRoutingKey,
+		chatExchange,
+		false,
+		nil,
+	); err != nil {
+		return fmt.Errorf("绑定 Queue 失败: %w", err)
+	}
+
+	log.Println("聊天消息队列声明成功")
+	return nil
+}
+
+// PublishChatMessage 发布聊天消息到 RabbitMQ
+func PublishChatMessage(body []byte) error {
+	if MQChannel == nil {
+		return fmt.Errorf("RabbitMQ Channel 未初始化")
+	}
+
+	return MQChannel.Publish(
+		chatExchange,   // exchange
+		chatRoutingKey, // routing key
+		false,          // mandatory
+		false,          // immediate
+		amqp.Publishing{
+			ContentType:  "application/json",
+			DeliveryMode: amqp.Persistent, // 消息持久化
+			Body:         body,
+		},
+	)
+}
+
+// ConsumeChatMessages 消费聊天消息，返回一个只读 channel
+func ConsumeChatMessages() (<-chan amqp.Delivery, error) {
+	if MQChannel == nil {
+		return nil, fmt.Errorf("RabbitMQ Channel 未初始化")
+	}
+
+	return MQChannel.Consume(
+		chatQueue, // queue
+		"",        // consumer tag（空表示自动生成）
+		false,     // auto-ack（手动ACK，确保消息不丢）
+		false,     // exclusive
+		false,     // no-local
+		false,     // no-wait
+		nil,       // arguments
+	)
+}

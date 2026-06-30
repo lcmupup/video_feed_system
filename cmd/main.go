@@ -34,6 +34,30 @@ func main() {
 	repository.InitRabbitMQ(&cfg.RabbitMQ)
 	defer repository.CloseRabbitMQ()
 
+	// 5.1 声明聊天消息队列（Exchange + Queue 绑定）
+	repository.DeclareChatQueue()
+
+	// 5.2 启动聊天消息消费者（在单独的 goroutine 中运行）
+	go service.StartConsumer(func(body *service.ChatMessageBody) error {
+		// 1. 持久化到 MySQL
+		msg, err := service.SaveMessage(body)
+		if err != nil {
+			return err
+		}
+
+		// 2. 推送给在线接收方（通过 WebSocket）
+		if handler.DefaultWSHandler != nil {
+			handler.DefaultWSHandler.SendToUser(body.ToUserID, gin.H{
+				"type":     "new_message",
+				"msg_id":   msg.ID,
+				"from":     body.FromUserID,
+				"content":  body.Content,
+				"time":     body.Timestamp,
+			})
+		}
+		return nil
+	})
+
 	// 6. 设置 Gin 模式
 	gin.SetMode(cfg.Server.Mode)
 
@@ -47,6 +71,8 @@ func main() {
 	commentHandler := handler.NewCommentHandler()
 	followHandler := handler.NewFollowHandler()
 	rankingHandler := handler.NewRankingHandler()
+	chatHandler := handler.NewChatHandler()
+	wsHandler := handler.NewWSHandler()
 
 	// 冷启动：从 MySQL 同步点赞数到 Redis 排行榜（Redis 不可用时会跳过）
 	service.RefreshRanking()
@@ -63,6 +89,7 @@ func main() {
 		api.GET("/user/:id/followers", followHandler.GetFollowers)   // 获取粉丝列表
 		api.GET("/user/:id/followings", followHandler.GetFollowings) // 获取关注列表
 		api.GET("/ranking", rankingHandler.GetRanking)                 // 点赞排行榜
+		api.GET("/ws/chat", wsHandler.HandleWebSocket)                 // WebSocket 聊天连接
 
 		// 需要登录的接口（使用JWT中间件）
 		auth := api.Group("")
@@ -94,6 +121,11 @@ func main() {
 			// 关注相关
 			auth.POST("/user/:id/follow", followHandler.FollowUser)     // 关注用户
 			auth.DELETE("/user/:id/follow", followHandler.UnfollowUser) // 取消关注
+
+			// 聊天相关
+			auth.POST("/chat/send", chatHandler.SendMessage)                       // 发送消息
+			auth.GET("/chat/history/:user_id", chatHandler.GetHistory)             // 获取聊天记录
+			auth.GET("/chat/conversations", chatHandler.GetConversations)          // 获取会话列表
 
 			// 管理相关
 			auth.POST("/admin/refresh-ranking", rankingHandler.RefreshRanking) // 手动刷新排行榜
